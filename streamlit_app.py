@@ -50,7 +50,7 @@ def predict_water_level_lstm(df, model_path, time_steps=120, n_future=288):  # �
 
     # สร้าง DataFrame จากผลลัพธ์ทำนาย
     last_date = pd.to_datetime(df['datetime'].iloc[-1])  # ใช้คอลัมน์ datetime เพื่อหาวันสุดท้าย
-    future_dates = pd.date_range(last_date, periods=n_future + 1, freq='15T')[1:]  # สร้างช่วงเวลาสำหรับ 3 วันข้างหน้า
+    future_dates = pd.date_range(last_date, periods=n_future + 1, freq='15min')[1:]  # แก้ไขเป็น '15min'
 
     df_predictions = pd.DataFrame(predictions_original_scale, columns=['prediction_wl_up'])
     df_predictions['datetime'] = future_dates
@@ -77,6 +77,9 @@ def plot_results(df_actual, df_predicted):
     # รวมข้อมูลทั้งสองเข้าด้วยกัน
     combined_data = pd.concat([data_actual, data_predicted])
 
+    # แปลงประเภทข้อมูล datetime เพื่อให้เข้ากับการแสดงผลของ Streamlit
+    combined_data['datetime'] = pd.to_datetime(combined_data['datetime'])
+
     # สร้างกราฟด้วย Altair และปรับแกน Y ไม่ให้เริ่มจาก 0
     y_min = combined_data['Water Level'].min() - 5  # ลดค่าต่ำสุดเพื่อให้เห็นการเปลี่ยนแปลงชัดเจนขึ้น
     y_max = combined_data['Water Level'].max() + 5  # เพิ่มค่าสูงสุด
@@ -102,7 +105,7 @@ if uploaded_file is not None:
     st.write("ทำนายระดับน้ำ 3 วันข้างหน้าหลังจากข้อมูลล่าสุด")
 
     # รันการทำนายด้วยโมเดล LSTM
-    df_predictions = predict_water_level_lstm(df, "lstm_2024_50epochs.keras")
+    df_predictions = predict_water_level_lstm(df, "lstm_3month_60epochs.keras")
 
     # พล๊อตผลลัพธ์การทำนายและข้อมูลจริง
     plot_results(df, df_predictions)
@@ -113,4 +116,5 @@ if uploaded_file is not None:
 
 else:
     st.write("กรุณาอัปโหลดไฟล์ CSV เพื่อเริ่มการทำนาย")
+
 
