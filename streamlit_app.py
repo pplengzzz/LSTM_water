@@ -105,7 +105,7 @@ if uploaded_file is not None:
     st.write("ทำนายระดับน้ำ 3 วันข้างหน้าหลังจากข้อมูลล่าสุด")
 
     # รันการทำนายด้วยโมเดล LSTM
-    df_predictions = predict_water_level_lstm(df, "lstm_3month_60epochs.keras")
+    df_predictions = predict_water_level_lstm(df, "lstm_2024_50epochs.keras")
 
     # พล๊อตผลลัพธ์การทำนายและข้อมูลจริง
     plot_results(df, df_predictions)
@@ -116,5 +116,6 @@ if uploaded_file is not None:
 
 else:
     st.write("กรุณาอัปโหลดไฟล์ CSV เพื่อเริ่มการทำนาย")
+
 
 
