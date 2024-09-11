@@ -7,10 +7,10 @@ from keras.models import load_model
 from sklearn.preprocessing import MinMaxScaler
 
 # ตั้งค่าหน้าเว็บ Streamlit
-st.set_page_config(page_title='Water Level Prediction (LSTM)', page_icon=':ocean:')
+st.set_page_config(page_title='การพยากรณ์ด้วย LSTM', page_icon=':ocean:')
 
 # ชื่อของแอป
-st.title("การจัดการข้อมูลระดับน้ำและการพยากรณ์ด้วย LSTM")
+st.title("และการพยากรณ์ด้วย LSTM")
 
 # ฟังก์ชันสร้างข้อมูลสำหรับ LSTM
 def create_dataset(data, look_back=15):
@@ -53,7 +53,7 @@ def predict_water_level_lstm(df, model_path, look_back=15):
 
     # สร้าง DataFrame สำหรับค่าที่ถูกพยากรณ์
     df_predictions = df.copy()
-    df_predictions.iloc[look_back:, 0] = predictions.flatten()
+    df_predictions.iloc[look_back:, 0] = predictions.flatten()  # เติมค่าที่ทำนายได้ ไม่ใช่ค่าจริง
 
     return df_predictions
 
@@ -127,6 +127,7 @@ if uploaded_file is not None:
             # แสดงผลลัพธ์การเติมค่าเป็นตาราง
             st.subheader('ตารางข้อมูลที่เติมค่า (datetime, wl_up)')
             st.write(filled_missing_data[['wl_up']])
+
 
 
 
