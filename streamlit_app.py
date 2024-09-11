@@ -33,26 +33,30 @@ def calculate_accuracy(filled_data, original_data, original_nan_indexes):
     st.write(f"Root Mean Square Error (RMSE): {rmse:.4f}")
 
 # ฟังก์ชันพยากรณ์ค่าระดับน้ำด้วย LSTM
-def predict_water_level_lstm(df, model_path, look_back=15):
+def predict_water_level_lstm(df_train, df_test, model_path, look_back=15):
     # โหลดโมเดล LSTM ที่ฝึกแล้ว
     model = load_model(model_path)
 
-    # Normalize the data
-    scaler = MinMaxScaler(feature_range=(0, 1))
-    df_scaled = scaler.fit_transform(df[['wl_up']])
+    # Normalize the training data
+    scaler_train = MinMaxScaler(feature_range=(0, 1))
+    df_train_scaled = scaler_train.fit_transform(df_train[['wl_up']])
+    
+    # Normalize the test data separately
+    scaler_test = MinMaxScaler(feature_range=(0, 1))
+    df_test_scaled = scaler_test.fit_transform(df_test[['wl_up']])
 
-    # เตรียมข้อมูลสำหรับ LSTM
-    X, _ = create_dataset(df_scaled, look_back)
-    X = np.reshape(X, (X.shape[0], X.shape[1], 1))
+    # เตรียมข้อมูลสำหรับ LSTM จากข้อมูลทดสอบ
+    X_test, _ = create_dataset(df_test_scaled, look_back)
+    X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], 1))
 
     # พยากรณ์ข้อมูล
-    predictions = model.predict(X)
+    predictions = model.predict(X_test)
 
     # Inverse scaling
-    predictions = scaler.inverse_transform(predictions)
+    predictions = scaler_test.inverse_transform(predictions)
 
     # สร้าง DataFrame สำหรับค่าที่ถูกพยากรณ์
-    df_predictions = df.copy()
+    df_predictions = df_test.copy()
     df_predictions.iloc[look_back:, 0] = predictions.flatten()  # เติมค่าที่ทำนายได้ ไม่ใช่ค่าจริง
 
     return df_predictions
@@ -97,7 +101,7 @@ if uploaded_file is not None:
             original_missing_data = missing_data.copy()
 
             # พยากรณ์ข้อมูลที่ถูกตัดออกด้วยโมเดล LSTM (โมเดลไม่เห็นช่วงนี้ตอนฝึก)
-            filled_missing_data = predict_water_level_lstm(missing_data, "lstm_2024_50epochs.keras")
+            filled_missing_data = predict_water_level_lstm(train_data, missing_data, "lstm_2024_50epochs.keras")
 
             # รวมข้อมูลทั้งหมด
             final_data = pd.concat([train_data, filled_missing_data]).sort_index()
