@@ -1,9 +1,10 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from tensorflow.keras.models import load_model
-from sklearn.preprocessing import StandardScaler
-import altair as alt
+import matplotlib.pyplot as plt
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+from keras.models import load_model
+from sklearn.preprocessing import MinMaxScaler
 
 # ตั้งค่าหน้าเว็บ Streamlit
 st.set_page_config(page_title='Water Level Prediction (LSTM)', page_icon=':ocean:')
@@ -11,111 +12,121 @@ st.set_page_config(page_title='Water Level Prediction (LSTM)', page_icon=':ocean
 # ชื่อของแอป
 st.title("การจัดการข้อมูลระดับน้ำและการพยากรณ์ด้วย LSTM")
 
-# อัปโหลดไฟล์ CSV
-uploaded_file = st.file_uploader("เลือกไฟล์ CSV", type="csv")
+# ฟังก์ชันสร้างข้อมูลสำหรับ LSTM
+def create_dataset(data, look_back=15):
+    X, y = [], []
+    for i in range(len(data) - look_back):
+        X.append(data[i:(i + look_back), 0])
+        y.append(data[i + look_back, 0])
+    return np.array(X), np.array(y)
 
-# ฟังก์ชันสำหรับการทำนาย
-def predict_water_level_lstm(df, model_path, time_steps=120, n_future=288):  # เปลี่ยน n_future เป็น 288 จุด (3 วัน)
-    # แปลงคอลัมน์ 'datetime' ให้เป็น datetime
-    df['datetime'] = pd.to_datetime(df['datetime'])
+# ฟังก์ชันคำนวณความแม่นยำ
+def calculate_accuracy(filled_data, original_data, original_nan_indexes):
+    actual_values = original_data.loc[original_nan_indexes, 'wl_up']
+    predicted_values = filled_data.loc[original_nan_indexes, 'wl_up']
+    
+    # คำนวณ MAE และ RMSE
+    mae = mean_absolute_error(actual_values, predicted_values)
+    rmse = np.sqrt(mean_squared_error(actual_values, predicted_values))
 
-    # เลือกเฉพาะคอลัมน์ 'wl_up' เพื่อทำนาย
-    df_selected = df[['wl_up']]
+    st.write(f"Mean Absolute Error (MAE): {mae:.4f}")
+    st.write(f"Root Mean Square Error (RMSE): {rmse:.4f}")
 
-    # สร้าง StandardScaler
-    scaler = StandardScaler()
-
-    # ปรับข้อมูล
-    df_scaled = scaler.fit_transform(df_selected)
-
-    # ใช้ข้อมูลย้อนหลังล่าสุดสำหรับการทำนาย
-    x_input = df_scaled[-time_steps:]
-    x_input = np.reshape(x_input, (1, time_steps, 1))  # reshape ให้ตรงตามอินพุตของโมเดล
-
-    # โหลดโมเดล LSTM ที่ถูกฝึกไว้ล่วงหน้า
+# ฟังก์ชันพยากรณ์ค่าระดับน้ำด้วย LSTM
+def predict_water_level_lstm(df, model_path, look_back=15):
+    # โหลดโมเดล LSTM ที่ฝึกแล้ว
     model = load_model(model_path)
 
-    # ทำนายทีละขั้น (Step-by-step Prediction)
-    predictions = []
-    for _ in range(n_future):
-        predicted = model.predict(x_input)
-        predictions.append(predicted[0, 0])
+    # Normalize the data
+    scaler = MinMaxScaler(feature_range=(0, 1))
+    df_scaled = scaler.fit_transform(df[['wl_up']])
 
-        # ใช้ค่าทำนายเป็นข้อมูลย้อนหลังสำหรับการทำนายครั้งถัดไป
-        predicted = np.reshape(predicted, (1, 1, 1))  # ปรับขนาด predicted เป็น (1, 1, 1)
-        x_input = np.append(x_input[:, 1:, :], predicted, axis=1)
+    # เตรียมข้อมูลสำหรับ LSTM
+    X, _ = create_dataset(df_scaled, look_back)
+    X = np.reshape(X, (X.shape[0], X.shape[1], 1))
 
-    # นำผลลัพธ์กลับไปสู่ขอบเขตเดิม (inverse transform)
-    predictions_original_scale = scaler.inverse_transform(np.array(predictions).reshape(-1, 1))
+    # พยากรณ์ข้อมูล
+    predictions = model.predict(X)
 
-    # สร้าง DataFrame จากผลลัพธ์ทำนาย
-    last_date = pd.to_datetime(df['datetime'].iloc[-1])  # ใช้คอลัมน์ datetime เพื่อหาวันสุดท้าย
-    future_dates = pd.date_range(last_date, periods=n_future + 1, freq='15min')[1:]  # แก้ไขเป็น '15min'
+    # Inverse scaling
+    predictions = scaler.inverse_transform(predictions)
 
-    df_predictions = pd.DataFrame(predictions_original_scale, columns=['prediction_wl_up'])
-    df_predictions['datetime'] = future_dates
-    df_predictions.set_index('datetime', inplace=True)
+    # สร้าง DataFrame สำหรับค่าที่ถูกพยากรณ์
+    df_predictions = df.copy()
+    df_predictions.iloc[look_back:, 0] = predictions.flatten()
 
     return df_predictions
 
-# ฟังก์ชันสำหรับการพล๊อตกราฟ
-def plot_results(df_actual, df_predicted):
-    # ข้อมูลจริง (Actual Data)
-    data_actual = pd.DataFrame({
-        'datetime': df_actual['datetime'],
-        'Water Level': df_actual['wl_up'],
-        'Type': 'Actual'
-    })
+# อัปโหลดไฟล์ CSV ข้อมูลจริง
+uploaded_file = st.file_uploader("เลือกไฟล์ CSV ข้อมูลจริง", type="csv")
 
-    # ข้อมูลทำนาย (Predicted Data)
-    data_predicted = pd.DataFrame({
-        'datetime': df_predicted.index,
-        'Water Level': df_predicted['prediction_wl_up'],
-        'Type': 'Predicted'
-    })
-
-    # รวมข้อมูลทั้งสองเข้าด้วยกัน
-    combined_data = pd.concat([data_actual, data_predicted])
-
-    # แปลงประเภทข้อมูล datetime เพื่อให้เข้ากับการแสดงผลของ Streamlit
-    combined_data['datetime'] = pd.to_datetime(combined_data['datetime'])
-
-    # สร้างกราฟด้วย Altair และปรับแกน Y ไม่ให้เริ่มจาก 0
-    y_min = combined_data['Water Level'].min() - 5  # ลดค่าต่ำสุดเพื่อให้เห็นการเปลี่ยนแปลงชัดเจนขึ้น
-    y_max = combined_data['Water Level'].max() + 5  # เพิ่มค่าสูงสุด
-
-    chart = alt.Chart(combined_data).mark_line().encode(
-        x='datetime:T',
-        y=alt.Y('Water Level:Q', scale=alt.Scale(domain=[y_min, y_max])),  # ปรับแกน Y
-        color='Type:N'
-    ).properties(
-        title='Water Level Prediction for Next 3 Days',
-        height=400
-    ).interactive()
-
-    st.altair_chart(chart, use_container_width=True)
-
-# การประมวลผลหลังจากอัปโหลดไฟล์
 if uploaded_file is not None:
-    # อ่านไฟล์ CSV ที่อัปโหลด
-    df = pd.read_csv(uploaded_file)
+    # โหลดข้อมูลจริง
+    data = pd.read_csv(uploaded_file)
+    data['datetime'] = pd.to_datetime(data['datetime'])
+    
+    # ทำให้ datetime เป็น tz-naive (ไม่มี timezone)
+    data['datetime'] = data['datetime'].dt.tz_localize(None)
+    
+    data.set_index('datetime', inplace=True)
 
-    # รันการทำนายด้วยโมเดล LSTM
-    st.markdown("---")
-    st.write("ทำนายระดับน้ำ 3 วันข้างหน้าหลังจากข้อมูลล่าสุด")
+    # ให้ผู้ใช้เลือกช่วงวันที่ที่ต้องการตัดข้อมูล
+    st.subheader("เลือกช่วงวันที่ที่ต้องการตัดข้อมูล")
+    start_date = st.date_input("เลือกวันเริ่มต้น", pd.to_datetime(data.index.min()).date())
+    end_date = st.date_input("เลือกวันสิ้นสุด", pd.to_datetime(data.index.max()).date())
 
-    # รันการทำนายด้วยโมเดล LSTM
-    df_predictions = predict_water_level_lstm(df, "lstm_2024_50epochs.keras")
+    # รวมวันและเวลาที่เลือกเข้าด้วยกันเป็นช่วงเวลา
+    start_datetime = pd.to_datetime(start_date)
+    end_datetime = pd.to_datetime(end_date) + pd.DateOffset(days=1) - pd.Timedelta(seconds=1)  # ให้ครอบคลุมทั้งวันสิ้นสุด
 
-    # พล๊อตผลลัพธ์การทำนายและข้อมูลจริง
-    plot_results(df, df_predictions)
+    # ตรวจสอบว่ามีข้อมูลในช่วงวันที่ที่เลือกหรือไม่
+    if not data.index.isin(pd.date_range(start=start_datetime, end=end_datetime)).any():
+        st.error("ไม่มีข้อมูลในช่วงวันที่ที่เลือก กรุณาเลือกช่วงวันที่ที่มีข้อมูล")
+    else:
+        if st.button("ตัดข้อมูล"):
+            # ข้อมูลก่อนและหลังช่วงเวลาที่ตัดออก (สำหรับฝึกโมเดล)
+            train_data = data[(data.index < start_datetime) | (data.index > end_datetime)]
 
-    # แสดงผลลัพธ์การทำนายเป็นตาราง
-    st.subheader('ตารางข้อมูลที่ทำนาย')
-    st.write(df_predictions)
+            # ข้อมูลช่วงเวลาที่ถูกตัดออก (สำหรับเติมข้อมูล)
+            missing_data = data[(data.index >= start_datetime) & (data.index <= end_datetime)]
 
-else:
-    st.write("กรุณาอัปโหลดไฟล์ CSV เพื่อเริ่มการทำนาย")
+            # สร้างสำเนาของข้อมูลก่อนถูกตัดออกเพื่อพล็อตกราฟ
+            original_missing_data = missing_data.copy()
+
+            # พยากรณ์ข้อมูลที่ถูกตัดออกด้วยโมเดล LSTM
+            filled_missing_data = predict_water_level_lstm(missing_data, "lstm_2024_50epochs.keras")
+
+            # รวมข้อมูลทั้งหมด
+            final_data = pd.concat([train_data, filled_missing_data]).sort_index()
+
+            # เก็บตำแหน่ง NaN ก่อนเติมค่า
+            original_nan_indexes = filled_missing_data.iloc[15:].index
+
+            # คำนวณความแม่นยำ
+            calculate_accuracy(filled_missing_data, original_missing_data, original_nan_indexes)
+
+            # แสดงกราฟข้อมูลที่ถูกเติม
+            plt.figure(figsize=(14, 7))
+
+            # ข้อมูลที่มีอยู่แล้ว
+            plt.plot(train_data.index, train_data['wl_up'], label='Existing Data', color='blue')
+
+            # ข้อมูลที่ถูกเติม
+            plt.plot(filled_missing_data.index, filled_missing_data['wl_up'], label='Filled Data (LSTM)', color='green')
+
+            # ข้อมูลที่ถูกตัดออก (แสดงค่าจริงก่อนเติม)
+            plt.plot(original_missing_data.index, original_missing_data['wl_up'], label='Original Missing Data', color='orange', linestyle='dotted')
+
+            plt.xlabel('Date')
+            plt.ylabel('Water Level (wl_up)')
+            plt.title('Water Level over Time with LSTM-filled Data')
+            plt.legend()
+            plt.grid(True)
+            st.pyplot(plt)
+
+            # แสดงผลลัพธ์การเติมค่าเป็นตาราง
+            st.subheader('ตารางข้อมูลที่เติมค่า (datetime, wl_up)')
+            st.write(filled_missing_data[['wl_up']])
 
 
 
