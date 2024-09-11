@@ -7,10 +7,10 @@ from keras.models import load_model
 from sklearn.preprocessing import MinMaxScaler
 
 # ตั้งค่าหน้าเว็บ Streamlit
-st.set_page_config(page_title='การพยากรณ์ด้วย LSTM', page_icon=':ocean:')
+st.set_page_config(page_title='Water Level Prediction (LSTM)', page_icon=':ocean:')
 
 # ชื่อของแอป
-st.title("และการพยากรณ์ด้วย LSTM")
+st.title("การจัดการข้อมูลระดับน้ำและการพยากรณ์ด้วย LSTM")
 
 # ฟังก์ชันสร้างข้อมูลสำหรับ LSTM
 def create_dataset(data, look_back=15):
