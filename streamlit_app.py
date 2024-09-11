@@ -90,6 +90,9 @@ if uploaded_file is not None:
             # ข้อมูลช่วงเวลาที่ถูกตัดออก (สำหรับเติมข้อมูล)
             missing_data = data[(data.index >= start_datetime) & (data.index <= end_datetime)]
 
+            # เก็บตำแหน่ง NaN ของข้อมูลที่ถูกตัดออก
+            original_nan_indexes = missing_data.index
+
             # สร้างสำเนาของข้อมูลก่อนถูกตัดออกเพื่อพล็อตกราฟ
             original_missing_data = missing_data.copy()
 
@@ -98,9 +101,6 @@ if uploaded_file is not None:
 
             # รวมข้อมูลทั้งหมด
             final_data = pd.concat([train_data, filled_missing_data]).sort_index()
-
-            # เก็บตำแหน่ง NaN ก่อนเติมค่า
-            original_nan_indexes = filled_missing_data.iloc[15:].index
 
             # คำนวณความแม่นยำ
             calculate_accuracy(filled_missing_data, original_missing_data, original_nan_indexes)
@@ -127,6 +127,7 @@ if uploaded_file is not None:
             # แสดงผลลัพธ์การเติมค่าเป็นตาราง
             st.subheader('ตารางข้อมูลที่เติมค่า (datetime, wl_up)')
             st.write(filled_missing_data[['wl_up']])
+
 
 
 
