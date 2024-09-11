@@ -96,7 +96,7 @@ if uploaded_file is not None:
             # สร้างสำเนาของข้อมูลก่อนถูกตัดออกเพื่อพล็อตกราฟ
             original_missing_data = missing_data.copy()
 
-            # พยากรณ์ข้อมูลที่ถูกตัดออกด้วยโมเดล LSTM
+            # พยากรณ์ข้อมูลที่ถูกตัดออกด้วยโมเดล LSTM (โมเดลไม่เห็นช่วงนี้ตอนฝึก)
             filled_missing_data = predict_water_level_lstm(missing_data, "lstm_2024_50epochs.keras")
 
             # รวมข้อมูลทั้งหมด
@@ -127,7 +127,6 @@ if uploaded_file is not None:
             # แสดงผลลัพธ์การเติมค่าเป็นตาราง
             st.subheader('ตารางข้อมูลที่เติมค่า (datetime, wl_up)')
             st.write(filled_missing_data[['wl_up']])
-
 
 
 
