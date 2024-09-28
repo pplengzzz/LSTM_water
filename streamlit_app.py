@@ -79,7 +79,25 @@ if uploaded_file is not None:
     # ทำให้ datetime เป็น tz-naive (ไม่มี timezone)
     data['datetime'] = data['datetime'].dt.tz_localize(None)
     
+    # ตั้งค่า datetime เป็นดัชนี
     data.set_index('datetime', inplace=True)
+
+    # **เพิ่มการกรองข้อมูลที่ wl_up >= 100**
+    data = data[data['wl_up'] >= 100]
+
+    # **เรียงข้อมูลตามวันที่และเวลา**
+    data = data.sort_index()
+
+    # **แสดงกราฟของข้อมูลที่กรองและเรียงแล้ว**
+    st.subheader("กราฟข้อมูลระดับน้ำที่กรองและเรียงแล้ว")
+    plt.figure(figsize=(14, 7))
+    plt.plot(data.index, data['wl_up'], label='Water Level (wl_up)', color='blue')
+    plt.xlabel('Date')
+    plt.ylabel('Water Level (wl_up)')
+    plt.title('Water Level over Time (Filtered and Sorted)')
+    plt.legend()
+    plt.grid(True)
+    st.pyplot(plt)
 
     # ให้ผู้ใช้เลือกช่วงวันที่ที่ต้องการตัดข้อมูล
     st.subheader("เลือกช่วงวันที่ที่ต้องการตัดข้อมูล")
