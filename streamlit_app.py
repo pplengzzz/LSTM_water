@@ -21,9 +21,9 @@ def create_dataset(data, look_back=15):
     return np.array(X), np.array(y)
 
 # ฟังก์ชันคำนวณความแม่นยำ
-def calculate_accuracy(filled_data, original_data, original_nan_indexes):
-    actual_values = original_data.loc[original_nan_indexes, 'wl_up']
-    predicted_values = filled_data.loc[original_nan_indexes, 'wl_up']
+def calculate_accuracy(filled_data, original_data):
+    actual_values = original_data['wl_up']
+    predicted_values = filled_data['wl_up']
     
     # คำนวณ MAE และ RMSE
     mae = mean_absolute_error(actual_values, predicted_values)
@@ -36,29 +36,36 @@ def calculate_accuracy(filled_data, original_data, original_nan_indexes):
 def predict_water_level_lstm(df_train, df_test, model_path, look_back=15):
     # โหลดโมเดล LSTM ที่ฝึกแล้ว
     model = load_model(model_path)
-
-    # Normalize the training data
-    scaler_train = MinMaxScaler(feature_range=(0, 1))
-    df_train_scaled = scaler_train.fit_transform(df_train[['wl_up']])
     
-    # Normalize the test data separately
-    scaler_test = MinMaxScaler(feature_range=(0, 1))
-    df_test_scaled = scaler_test.fit_transform(df_test[['wl_up']])
-
+    # ฟิต Scaler ด้วยข้อมูลฝึก
+    scaler = MinMaxScaler(feature_range=(0, 1))
+    scaler.fit(df_train[['wl_up']])
+    
+    # ปรับขนาดข้อมูลฝึกและทดสอบด้วย Scaler เดียวกัน
+    df_train_scaled = scaler.transform(df_train[['wl_up']])
+    df_test_scaled = scaler.transform(df_test[['wl_up']])
+    
     # เตรียมข้อมูลสำหรับ LSTM จากข้อมูลทดสอบ
-    X_test, _ = create_dataset(df_test_scaled, look_back)
+    # ใช้ข้อมูลช่วงท้ายของข้อมูลฝึกเพื่อสร้างลำดับเวลาสำหรับการทำนาย
+    last_train_values = df_train_scaled[-look_back:]
+    combined_scaled = np.concatenate((last_train_values, df_test_scaled), axis=0)
+    
+    X_test = []
+    for i in range(look_back, len(combined_scaled)):
+        X_test.append(combined_scaled[i-look_back:i, 0])
+    X_test = np.array(X_test)
     X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], 1))
-
+    
     # พยากรณ์ข้อมูล
     predictions = model.predict(X_test)
-
+    
     # Inverse scaling
-    predictions = scaler_test.inverse_transform(predictions)
-
-    # สร้าง DataFrame สำหรับค่าที่ถูกพยากรณ์
+    predictions = scaler.inverse_transform(predictions)
+    
+    # สร้าง DataFrame สำหรับค่าที่ทำนาย
     df_predictions = df_test.copy()
-    df_predictions.iloc[look_back:, 0] = predictions.flatten()  # เติมค่าที่ทำนายได้ ไม่ใช่ค่าจริง
-
+    df_predictions.iloc[:, df_predictions.columns.get_loc('wl_up')] = predictions.flatten()
+    
     return df_predictions
 
 # อัปโหลดไฟล์ CSV ข้อมูลจริง
@@ -94,9 +101,6 @@ if uploaded_file is not None:
             # ข้อมูลช่วงเวลาที่ถูกตัดออก (สำหรับเติมข้อมูล)
             missing_data = data[(data.index >= start_datetime) & (data.index <= end_datetime)]
 
-            # เก็บตำแหน่ง NaN ของข้อมูลที่ถูกตัดออก
-            original_nan_indexes = missing_data.index
-
             # สร้างสำเนาของข้อมูลก่อนถูกตัดออกเพื่อพล็อตกราฟ
             original_missing_data = missing_data.copy()
 
@@ -107,7 +111,7 @@ if uploaded_file is not None:
             final_data = pd.concat([train_data, filled_missing_data]).sort_index()
 
             # คำนวณความแม่นยำ
-            calculate_accuracy(filled_missing_data, original_missing_data, original_nan_indexes)
+            calculate_accuracy(filled_missing_data, original_missing_data)
 
             # แสดงกราฟข้อมูลที่ถูกเติม
             plt.figure(figsize=(14, 7))
